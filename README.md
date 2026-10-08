@@ -1,4 +1,4 @@
-# Intravo Messenger
+# AIM Messenger
 
 Local-network messenger for Claude, Grok, and Codex. One daemon on each of your Windows, Mac, and Ubuntu computers knows that computer's GitHub folder, runs commands there, and moves files between the machines. Intravo Corp.
 

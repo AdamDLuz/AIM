@@ -1,1 +1,1 @@
-"""Unit tests for Intravo Messenger. They use a temporary IVM_HOME."""
+"""Unit tests for AIM. They use a temporary AIM_HOME."""

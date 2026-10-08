@@ -1,29 +1,31 @@
-# AIM Messenger
+# AIM
 
-Local-network messenger for Claude, Grok, and Codex. One daemon on each of your Windows, Mac, and Ubuntu computers knows that computer's GitHub folder, runs commands there, and moves files between the machines. Intravo Corp.
+AI Messenger is a local-network messenger for Claude, Grok, and Codex. One daemon on each of your Windows, Mac, and Ubuntu computers knows that computer's GitHub folder, runs commands there, and moves files between the machines.
 
-An agent on one computer can ask another to `git pull` and build, then take the compiled result back. `ivm task` runs even when the agent session on the other computer is closed. `ivm send` leaves mail until that agent reads `ivm inbox`.
+Made by Intravo Corp.
 
-Humans can use the same commands. Run `ivm --help` for the full list. Agents should pass `--json`.
+An agent on one computer can ask another to `git pull` and build, then take the compiled result back. `aim task` runs even when the agent session on the other computer is closed. `aim send` leaves mail until that agent reads `aim inbox`.
+
+Humans can use the same commands. Run `aim --help` for the full list. Agents should pass `--json`.
 
 ## Example
 
 Windows asks the Mac to update a repo, build, and send the result back:
 
 ```
-ivm peers
-ivm task adam-mac --cwd MyApp --from claude --to claude --wait --timeout 900 --return-file dist/MyApp --fetch-to incoming --shell "git pull && make"
+aim peers
+aim task adam-mac --cwd MyApp --from claude --to claude --wait --timeout 900 --return-file dist/MyApp --fetch-to incoming --shell "git pull && make"
 ```
 
-`adam-mac` is the name chosen when that computer was installed. `--cwd` and `--return-file` are relative to the Mac's GitHub folder, which `ivm peers` prints. A directory comes back as a zip into `incoming` on the Windows machine.
+`adam-mac` is the name chosen when that computer was installed. `--cwd` and `--return-file` are relative to the Mac's GitHub folder, which `aim peers` prints. A directory comes back as a zip into `incoming` on the Windows machine.
 
 To leave a note for Claude on that Mac instead of running a command:
 
 ```
-ivm send adam-mac --from claude --to claude --message "pulled the build"
+aim send adam-mac --from claude --to claude --message "pulled the build"
 ```
 
-Claude on the Mac reads it with `ivm inbox --agent claude`.
+Claude on the Mac reads it with `aim inbox --agent claude`.
 
 ## Install
 
@@ -43,19 +45,19 @@ sh scripts/install.sh
 
 Add `--name adam-win` (or `adam-mac`, `adam-ubuntu`) so the other machines see a stable name. Add `--github-root` when the GitHub folder is somewhere else. The installer otherwise looks for `Documents/GitHub`, `GitHub`, `source/repos`, `Projects`, `code`, or `src` under your home directory.
 
-Install registers the `ivm` command, copies the agent skill for Claude, Codex, and Grok, and starts the daemon. On Windows it registers a logon task. If Task Scheduler refuses that task, the installer puts `IntravoMessenger.vbs` in the user Startup folder instead. New terminals pick up `ivm` after the user PATH change.
+Install registers the `aim` command, copies the agent skill for Claude, Codex, and Grok, and starts the daemon. On Windows it registers a logon task. If Task Scheduler refuses that task, the installer puts `AIM.vbs` in the user Startup folder instead. New terminals pick up `aim` after the user PATH change. On Mac the installer writes that PATH line to both `~/.zprofile` and `~/.zshrc`, and links the command at `~/.local/bin/aim`. On Ubuntu it writes `~/.profile` and `~/.bashrc` and makes the same link.
 
-Config lives at `%USERPROFILE%\.intravo-messenger\config.json` on Windows and `~/.intravo-messenger/config.json` on Mac and Ubuntu. The shared key is in that file. Re-running install keeps the same key.
+Config lives at `%USERPROFILE%\.aim\config.json` on Windows and `~/.aim/config.json` on Mac and Ubuntu. The shared key is in that file. Re-running install keeps the same key.
 
 ## Pair the other computers
 
 On the first computer:
 
 ```
-ivm pair-export
+aim pair-export
 ```
 
-That writes a pair file (by default `~/.intravo-messenger/pair.json`). Copy the file to the other computer yourself. Do not paste it into a chat, commit it, or email it.
+That writes a pair file (by default `~/.aim/pair.json`). Copy the file to the other computer yourself. Do not paste it into a chat, commit it, or email it.
 
 On each other computer, from a checkout of this repo:
 
@@ -69,10 +71,10 @@ Windows:
 powershell -ExecutionPolicy Bypass -File scripts\install.ps1 --secret-file C:\path\to\pair.json --name adam-ubuntu
 ```
 
-Use a different `--name` on every machine. After that, `ivm peers` on any of them should list the others. If a machine stays missing, broadcast is blocked (Wi-Fi client isolation or a firewall). Pin the address:
+Use a different `--name` on every machine. After that, `aim peers` on any of them should list the others. If a machine stays missing, broadcast is blocked (Wi-Fi client isolation or a firewall). Pin the address:
 
 ```
-ivm peers add 192.168.1.20
+aim peers add 192.168.1.20
 ```
 
 ## Firewall
@@ -82,8 +84,8 @@ The daemon listens on TCP 4777. Discovery uses UDP 4778. Both are inbound on pri
 Windows, in an elevated PowerShell:
 
 ```
-New-NetFirewallRule -DisplayName "Intravo Messenger" -Direction Inbound -Protocol TCP -LocalPort 4777 -Action Allow -Profile Private
-New-NetFirewallRule -DisplayName "Intravo Messenger Discovery" -Direction Inbound -Protocol UDP -LocalPort 4778 -Action Allow -Profile Private
+New-NetFirewallRule -DisplayName "AI Messenger" -Direction Inbound -Protocol TCP -LocalPort 4777 -Action Allow -Profile Private
+New-NetFirewallRule -DisplayName "AI Messenger Discovery" -Direction Inbound -Protocol UDP -LocalPort 4778 -Action Allow -Profile Private
 ```
 
 If Windows asks whether to allow Python, allow it on private networks. The installer does not add these rules.
@@ -108,9 +110,9 @@ Do not commit `config.json` or `pair.json`.
 ## Check one machine
 
 ```
-ivm status
-ivm whoami
-ivm self-test
+aim status
+aim whoami
+aim self-test
 ```
 
-`ivm whoami` prints the node name, the operating system, and the GitHub folder. It does not print the key. `ivm self-test` sends a local message and runs `echo ivm-ok` on this computer. It does not prove that the Mac or the Ubuntu computer can see this one. After those computers are paired, `ivm peers` should show them online.
+`aim whoami` prints the node name, the operating system, and the GitHub folder. It does not print the key. `aim self-test` sends a local message and runs `echo aim-ok` on this computer. It does not prove that the Mac or the Ubuntu computer can see this one. After those computers are paired, `aim peers` should show them online.

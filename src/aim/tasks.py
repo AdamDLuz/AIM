@@ -18,11 +18,11 @@ import uuid
 import zipfile
 from pathlib import Path
 
-from intravo_messenger.config import Config, home_dir
-from intravo_messenger.jail import PathJailError, assert_outside_home, resolve_inside
-from intravo_messenger.store import Store, utc_now
+from aim.config import Config, home_dir
+from aim.jail import PathJailError, assert_outside_home, resolve_inside
+from aim.store import Store, utc_now
 
-log = logging.getLogger("ivm.tasks")
+log = logging.getLogger("aim.tasks")
 
 MAX_OUTPUT_CHARS = 200_000
 MAX_ARGV = 64
@@ -89,7 +89,7 @@ def kill_tree(pid: int) -> None:
 def _tail(text: str) -> tuple[str, bool]:
     if len(text) <= MAX_OUTPUT_CHARS:
         return text, False
-    notice = "\n[ivm] output truncated; showing the last 200000 characters\n"
+    notice = "\n[aim] output truncated; showing the last 200000 characters\n"
     keep = MAX_OUTPUT_CHARS - len(notice)
     return notice + text[-keep:], True
 
@@ -164,7 +164,7 @@ class TaskRunner:
         self._audit(f"queued task {task_id} from {record['from_node']}/{record['from_agent']} cwd={cwd} cmd={record['command']}")
         thread = threading.Thread(
             target=self._run,
-            name=f"ivm-task-{task_id[:8]}",
+            name=f"aim-task-{task_id[:8]}",
             args=(task_id, command, cwd, timeout_s, [str(item) for item in return_files]),
             daemon=True,
         )
@@ -306,7 +306,7 @@ class TaskRunner:
             f"on {self.cfg.name}: {task['command']}"
         )
         try:
-            from intravo_messenger.client import Client
+            from aim.client import Client
 
             client = Client(host, int(port), self.cfg.secret, timeout=5)
             client.send_message(
@@ -400,6 +400,6 @@ def _zip_tree(source: Path, dest: Path, max_bytes: int) -> None:
 
 
 def _inside_tree(child: Path, parent: Path) -> bool:
-    from intravo_messenger.jail import is_inside
+    from aim.jail import is_inside
 
     return is_inside(child, parent)

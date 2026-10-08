@@ -14,31 +14,31 @@ import time
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from intravo_messenger import __version__
-from intravo_messenger.client import Client, IvmError
-from intravo_messenger.config import (
+from aim import __version__
+from aim.client import Client, AimError
+from aim.config import (
     agent_name,
     home_dir,
     load_config,
     os_label,
 )
-from intravo_messenger.discovery import Discovery
-from intravo_messenger.install import (
+from aim.discovery import Discovery
+from aim.install import (
     install_machine,
     read_secret_file,
     write_pair_file,
 )
-from intravo_messenger.peers import (
+from aim.peers import (
     PeerError,
     annotate,
     learn_peer,
     remember_address,
     resolve_peer,
 )
-from intravo_messenger.server import App, IvmHTTPServer
-from intravo_messenger.store import Store, utc_now
+from aim.server import App, AimHTTPServer
+from aim.store import Store, utc_now
 
-log = logging.getLogger("ivm")
+log = logging.getLogger("aim")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -47,7 +47,7 @@ def main(argv: list[str] | None = None) -> int:
     _configure_stdio()
     cleaned, json_mode, home, command = _extract(list(argv))
     if home:
-        os.environ["IVM_HOME"] = home
+        os.environ["AIM_HOME"] = home
     parser = _parser()
     if not cleaned:
         parser.print_help()
@@ -57,7 +57,7 @@ def main(argv: list[str] | None = None) -> int:
     args.command = command
     try:
         return int(_COMMANDS[args.cmd](args))
-    except (IvmError, PeerError, FileNotFoundError, ValueError) as exc:
+    except (AimError, PeerError, FileNotFoundError, ValueError) as exc:
         return _fail(args, str(exc))
     except KeyboardInterrupt:
         return 130
@@ -65,8 +65,8 @@ def main(argv: list[str] | None = None) -> int:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="ivm",
-        description="Local network messenger for Claude, Grok, and Codex.",
+        prog="aim",
+        description="AIM (AI Messenger): local network messenger for Claude, Grok, and Codex.",
     )
     sub = parser.add_subparsers(dest="cmd", required=True)
 
@@ -157,7 +157,7 @@ def _cmd_install(args: argparse.Namespace) -> int:
     if result.get("started"):
         result["healthy"] = _wait_healthy()
         if not result["healthy"]:
-            result["notes"].append("the daemon was started but is not answering yet; run ivm status")
+            result["notes"].append("the daemon was started but is not answering yet; run aim status")
     human = "\n".join(result["notes"])
     return _emit(args, result, human)
 
@@ -173,7 +173,7 @@ def _cmd_serve(args: argparse.Namespace) -> int:
     store = Store(home / "messenger.db")
     app = App(cfg, store)
     try:
-        httpd = IvmHTTPServer((cfg.bind_host, int(cfg.http_port)), app)
+        httpd = AimHTTPServer((cfg.bind_host, int(cfg.http_port)), app)
     except OSError as exc:
         _release_lock(lock)
         return _fail(args, f"cannot listen on {cfg.bind_host}:{cfg.http_port}: {exc}")
@@ -181,7 +181,7 @@ def _cmd_serve(args: argparse.Namespace) -> int:
     discovery.start()
     log.info("listening on %s:%s as %s", cfg.bind_host, cfg.http_port, cfg.name)
     print(
-        f"Intravo Messenger listening on {cfg.bind_host}:{cfg.http_port} as {cfg.name}",
+        f"AIM listening on {cfg.bind_host}:{cfg.http_port} as {cfg.name}",
         flush=True,
     )
     try:
@@ -202,7 +202,7 @@ def _cmd_stop(args: argparse.Namespace) -> int:
     try:
         client.request_json("POST", "/v1/stop", {})
         return _emit(args, {"ok": True, "stopped": True}, "stopped")
-    except IvmError:
+    except AimError:
         home = home_dir()
         lock = home / "daemon.lock"
         if not lock.is_file():
@@ -224,7 +224,7 @@ def _cmd_status(args: argparse.Namespace) -> int:
     try:
         health = client.health()
         identity = client.identity()
-    except IvmError as exc:
+    except AimError as exc:
         return _fail(args, f"not running ({exc})")
     payload = {"ok": True, "running": True, "health": health, "identity": identity}
     human = (
@@ -269,7 +269,7 @@ def _cmd_self_test(args: argparse.Namespace) -> int:
         from_node=cfg.name,
         from_agent="claude",
         to_agent="grok",
-        body="ivm-self-test",
+        body="aim-self-test",
     )
     created = client.create_task(
         {
@@ -277,15 +277,15 @@ def _cmd_self_test(args: argparse.Namespace) -> int:
             "from_agent": "claude",
             "to_agent": "grok",
             "cwd": ".",
-            "shell": "echo ivm-ok",
+            "shell": "echo aim-ok",
             "timeout_s": 30,
             "reply_port": cfg.http_port,
         }
     )
     task = _poll_task(client, created["task"]["id"], 30)
     inbox = client.inbox("grok")
-    ok = task.get("exit_code") == 0 and "ivm-ok" in (task.get("output") or "")
-    found = any(item.get("body") == "ivm-self-test" for item in inbox.get("messages") or [])
+    ok = task.get("exit_code") == 0 and "aim-ok" in (task.get("output") or "")
+    found = any(item.get("body") == "aim-self-test" for item in inbox.get("messages") or [])
     payload = {"ok": ok and found, "message_id": sent.get("id"), "task": task, "inbox_has_message": found}
     if not payload["ok"]:
         return _emit(args, payload, "self-test failed", 1)
@@ -297,12 +297,12 @@ def _cmd_peers(args: argparse.Namespace) -> int:
     store = _store()
     if args.action == "add":
         if not args.host:
-            return _fail(args, "usage: ivm peers add HOST [--port N]")
+            return _fail(args, "usage: aim peers add HOST [--port N]")
         host, port = _split_host(args.host, args.port or cfg.http_port)
         remember_address(store, host, port, pinned=True)
         try:
             learn_peer(store, cfg, host, port, pinned=True)
-        except IvmError as exc:
+        except AimError as exc:
             return _emit(
                 args,
                 {"ok": True, "pinned": f"{host}:{port}", "warning": str(exc)},
@@ -311,7 +311,7 @@ def _cmd_peers(args: argparse.Namespace) -> int:
         return _cmd_peers_list(args, cfg, store)
     if args.action == "remove":
         if not args.host:
-            return _fail(args, "usage: ivm peers remove HOST")
+            return _fail(args, "usage: aim peers remove HOST")
         return _remove_peer(args, store)
     return _cmd_peers_list(args, cfg, store)
 
@@ -497,7 +497,7 @@ def _cmd_pair_export(args: argparse.Namespace) -> int:
     human = (
         f"wrote {path}\n"
         "Copy that file to the other computer and run:\n"
-        "ivm install --secret-file <path> --name <machine>\n"
+        "aim install --secret-file <path> --name <machine>\n"
         "The file is the network key. Do not commit it or paste it into a chat."
     )
     return _emit(args, payload, human)
@@ -607,7 +607,7 @@ def _store() -> Store:
 def _daemon_answers(cfg) -> bool:
     try:
         _local_client(cfg, timeout=2).health()
-    except IvmError:
+    except AimError:
         return False
     return True
 
@@ -632,7 +632,7 @@ def _poll_task(client: Client, task_id: str, timeout_s: int) -> dict:
         if task.get("status") not in {"queued", "running"}:
             return task
         if time.time() > deadline:
-            raise IvmError(f"timed out waiting for task {task_id}")
+            raise AimError(f"timed out waiting for task {task_id}")
         time.sleep(0.5)
 
 

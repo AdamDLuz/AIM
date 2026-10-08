@@ -1,13 +1,13 @@
 [project]
-name = "intravo-messenger"
+name = "aim"
 version = "1.0.0"
-description = "Local network messenger for Claude, Grok, and Codex"
+description = "AIM (AI Messenger): local network messenger for Claude, Grok, and Codex"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{ name = "Intravo Corp" }]
 
 [project.scripts]
-ivm = "intravo_messenger.cli:main"
+aim = "aim.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

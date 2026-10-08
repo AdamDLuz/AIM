@@ -1,4 +1,4 @@
-"""Shared fixtures. Tests set IVM_HOME and never touch the real profile."""
+"""Shared fixtures. Tests set AIM_HOME and never touch the real profile."""
 
 from __future__ import annotations
 
@@ -33,12 +33,12 @@ class LiveNode:
         self.home = base / "home"
         self.github = base / "GitHub"
         (self.github / "Demo").mkdir(parents=True)
-        self._old = os.environ.get("IVM_HOME")
-        os.environ["IVM_HOME"] = str(self.home)
-        from intravo_messenger.client import Client
-        from intravo_messenger.config import create_config, save_config
-        from intravo_messenger.server import App, IvmHTTPServer
-        from intravo_messenger.store import Store
+        self._old = os.environ.get("AIM_HOME")
+        os.environ["AIM_HOME"] = str(self.home)
+        from aim.client import Client
+        from aim.config import create_config, save_config
+        from aim.server import App, AimHTTPServer
+        from aim.store import Store
 
         port = free_port()
         cfg = create_config(
@@ -53,11 +53,11 @@ class LiveNode:
         self.cfg = cfg
         store = Store(self.home / "messenger.db")
         self.app = App(cfg, store)
-        self.httpd = IvmHTTPServer(("127.0.0.1", port), self.app)
+        self.httpd = AimHTTPServer(("127.0.0.1", port), self.app)
         self.thread = threading.Thread(
             target=self.httpd.serve_forever,
             kwargs={"poll_interval": 0.2},
-            name="ivm-test-http",
+            name="aim-test-http",
             daemon=True,
         )
         self.thread.start()
@@ -79,9 +79,9 @@ class LiveNode:
             self.thread.join(timeout=5)
         finally:
             if self._old is None:
-                os.environ.pop("IVM_HOME", None)
+                os.environ.pop("AIM_HOME", None)
             else:
-                os.environ["IVM_HOME"] = self._old
+                os.environ["AIM_HOME"] = self._old
             self._tmp.cleanup()
 
 

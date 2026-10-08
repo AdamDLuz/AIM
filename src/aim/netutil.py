@@ -54,7 +54,7 @@ def broadcast_targets(ipv4s: list[str] | None = None) -> list[str]:
     """Global broadcast plus a /24 broadcast for each local IPv4.
 
     Home networks are almost always /24. A machine on a wider subnet can
-    still be pinned with `ivm peers add`.
+    still be pinned with `aim peers add`.
     """
     targets = ["255.255.255.255"]
     for ip in ipv4s if ipv4s is not None else local_ipv4s():

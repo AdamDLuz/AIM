@@ -10,7 +10,7 @@ from urllib.parse import quote, unquote
 import http.client
 
 
-class IvmError(Exception):
+class AimError(Exception):
     def __init__(self, message: str, status: int = 0):
         super().__init__(message)
         self.status = status
@@ -83,10 +83,12 @@ class Client:
                 headers={
                     "Content-Length": str(size),
                     "Content-Type": "application/octet-stream",
-                    "X-IVM-Filename": quote(local.name),
-                    "X-IVM-Dest": quote(dest_rel, safe="/"),
-                    "X-IVM-From-Node": quote(from_node),
-                    "X-IVM-From-Agent": quote(from_agent),
+                    **_file_headers(
+                        filename=quote(local.name),
+                        dest=quote(dest_rel, safe="/"),
+                        from_node=quote(from_node),
+                        from_agent=quote(from_agent),
+                    ),
                 },
                 timeout=timeout,
             )
@@ -100,14 +102,14 @@ class Client:
             dest=dest,
         )
         if status >= 400:
-            raise IvmError(f"HTTP {status}", status)
+            raise AimError(f"HTTP {status}", status)
         saved = self.last_saved or dest
         return {
             "ok": True,
             "path": str(saved),
             "bytes": size,
-            "sha256": _header(headers, "X-IVM-Sha256"),
-            "filename": unquote(_header(headers, "X-IVM-Filename") or saved.name),
+            "sha256": _header(headers, "X-AIM-Sha256"),
+            "filename": unquote(_header(headers, "X-AIM-Filename") or saved.name),
         }
 
     def export_path(self, rel: str, dest: Path) -> dict:
@@ -121,15 +123,15 @@ class Client:
             dest=dest,
         )
         if status >= 400:
-            raise IvmError(f"HTTP {status}", status)
+            raise AimError(f"HTTP {status}", status)
         saved = self.last_saved or dest
         return {
             "ok": True,
             "path": str(saved),
             "bytes": size,
-            "sha256": _header(headers, "X-IVM-Sha256"),
-            "filename": unquote(_header(headers, "X-IVM-Filename") or saved.name),
-            "kind": _header(headers, "X-IVM-Kind") or "file",
+            "sha256": _header(headers, "X-AIM-Sha256"),
+            "filename": unquote(_header(headers, "X-AIM-Filename") or saved.name),
+            "kind": _header(headers, "X-AIM-Kind") or "file",
         }
 
     def request_json(
@@ -156,7 +158,7 @@ class Client:
             timeout=timeout,
         )
         if not isinstance(raw, (bytes, bytearray)):
-            raise IvmError("expected a json body")
+            raise AimError("expected a json body")
         return _json_or_error(status, raw)
 
     def _request(
@@ -170,7 +172,7 @@ class Client:
         timeout: float | None = None,
         dest: Path | None = None,
     ) -> tuple[int, dict[str, str], bytes | int]:
-        outgoing = {"User-Agent": "intravo-messenger", "Connection": "close"}
+        outgoing = {"User-Agent": "aim", "Connection": "close"}
         if auth:
             outgoing["Authorization"] = f"Bearer {self.secret}"
         if headers:
@@ -183,7 +185,7 @@ class Client:
             if dest is not None and response.status < 400:
                 final = dest
                 if dest.exists() and dest.is_dir():
-                    name = Path(unquote(_header(header_map, "X-IVM-Filename") or "download")).name
+                    name = Path(unquote(_header(header_map, "X-AIM-Filename") or "download")).name
                     if not name or name in {".", ".."}:
                         name = "download"
                     final = dest / name
@@ -202,19 +204,38 @@ class Client:
             if dest is not None and response.status >= 400:
                 _json_or_error(response.status, payload)
             return response.status, header_map, payload
-        except IvmError:
+        except AimError:
             raise
         except (TimeoutError, OSError) as exc:
-            raise IvmError(f"cannot reach {self.host}:{self.port}: {exc}") from exc
+            raise AimError(f"cannot reach {self.host}:{self.port}: {exc}") from exc
         finally:
             conn.close()
 
 
 def _header(headers: dict[str, str], name: str) -> str:
-    for key, value in headers.items():
-        if key.lower() == name.lower():
-            return value
+    names = [name]
+    if name.lower().startswith("x-aim-"):
+        names.append("X-IVM-" + name[6:])
+    for wanted in names:
+        for key, value in headers.items():
+            if key.lower() == wanted.lower():
+                return value
     return ""
+
+
+def _file_headers(*, filename: str, dest: str, from_node: str, from_agent: str) -> dict[str, str]:
+    """Send the current header names and the earlier X-IVM-* names."""
+    fields = {
+        "Filename": filename,
+        "Dest": dest,
+        "From-Node": from_node,
+        "From-Agent": from_agent,
+    }
+    headers: dict[str, str] = {}
+    for prefix in ("X-AIM-", "X-IVM-"):
+        for key, value in fields.items():
+            headers[prefix + key] = value
+    return headers
 
 
 def _json_or_error(status: int, raw: bytes) -> dict:
@@ -222,10 +243,10 @@ def _json_or_error(status: int, raw: bytes) -> dict:
     try:
         data = json.loads(text) if text else {}
     except json.JSONDecodeError as exc:
-        raise IvmError(f"HTTP {status}: response was not json", status) from exc
+        raise AimError(f"HTTP {status}: response was not json", status) from exc
     if not isinstance(data, dict):
-        raise IvmError(f"HTTP {status}: response was not an object", status)
+        raise AimError(f"HTTP {status}: response was not an object", status)
     if status >= 400 or data.get("ok") is False:
-        raise IvmError(str(data.get("error") or f"HTTP {status}"), status)
+        raise AimError(str(data.get("error") or f"HTTP {status}"), status)
     data.setdefault("ok", True)
     return data

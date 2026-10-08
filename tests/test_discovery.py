@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import socket
 import unittest
 
 from tests.support import ROOT  # noqa: F401
 
-from intravo_messenger.discovery import decode_beacon, encode_beacon
-from intravo_messenger.netutil import broadcast_targets, is_lan_address
+from aim.discovery import decode_beacon, encode_beacon
+from aim.netutil import broadcast_targets, is_lan_address
 
 
 class DiscoveryTests(unittest.TestCase):
@@ -24,7 +25,7 @@ class DiscoveryTests(unittest.TestCase):
             "exec_enabled": True,
         }
         raw = encode_beacon(payload)
-        self.assertTrue(raw.startswith(b"IVM1"))
+        self.assertTrue(raw.startswith(b"AIM1"))
         self.assertNotIn(b"secret", raw)
 
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -47,9 +48,16 @@ class DiscoveryTests(unittest.TestCase):
         self.assertEqual(decoded["port"], 4777)
         self.assertNotIn("secret", decoded)
 
+    def test_accepts_earlier_beacon(self) -> None:
+        payload = {"v": 1, "node_id": "abc", "name": "old-node", "port": 4777}
+        decoded = decode_beacon(b"IVM1" + json.dumps(payload).encode("utf-8"))
+        self.assertIsNotNone(decoded)
+        assert decoded is not None
+        self.assertEqual(decoded["name"], "old-node")
+
     def test_rejects_junk(self) -> None:
         self.assertIsNone(decode_beacon(b"NOPE"))
-        self.assertIsNone(decode_beacon(b"IVM1{"))
+        self.assertIsNone(decode_beacon(b"AIM1{"))
         self.assertIsNone(decode_beacon(encode_beacon({"v": 1, "node_id": "x", "name": "n"})[:4] + b"{}"))
 
     def test_lan_addresses(self) -> None:

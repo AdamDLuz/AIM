@@ -17,16 +17,28 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
-from intravo_messenger.config import VERSION, Config, agent_name, home_dir, node_name_ok, os_label
-from intravo_messenger.jail import PathJailError, is_inside, resolve_inside
-from intravo_messenger.netutil import is_lan_address, normalize_ip
-from intravo_messenger.store import Store
-from intravo_messenger.tasks import TaskError, TaskRunner, _zip_tree
+from aim.config import VERSION, Config, agent_name, home_dir, node_name_ok, os_label
+from aim.jail import PathJailError, is_inside, resolve_inside
+from aim.netutil import is_lan_address, normalize_ip
+from aim.store import Store
+from aim.tasks import TaskError, TaskRunner, _zip_tree
 
-log = logging.getLogger("ivm.http")
+log = logging.getLogger("aim.http")
 
 JSON_LIMIT = 1_000_000
 BODY_CHARS = 64_000
+
+
+def header_value(headers, name: str, default: str = "") -> str:
+    """Read an X-AIM-* header, or the earlier X-IVM-* name."""
+    value = headers.get(name)
+    if value:
+        return value
+    if name.startswith("X-AIM-"):
+        legacy = headers.get("X-IVM-" + name[len("X-AIM-") :])
+        if legacy:
+            return legacy
+    return default
 
 
 class App:
@@ -37,7 +49,7 @@ class App:
         self.stop = threading.Event()
 
 
-class IvmHTTPServer(ThreadingHTTPServer):
+class AimHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
 
     def __init__(self, server_address, app: App):
@@ -285,17 +297,17 @@ class Handler(BaseHTTPRequestHandler):
         length = self._content_length(self.app.cfg.max_file_bytes)
         if length is None:
             return
-        filename = Path(unquote(self.headers.get("X-IVM-Filename", "file"))).name
-        dest_rel = unquote(self.headers.get("X-IVM-Dest", "")).strip()
+        filename = Path(unquote(header_value(self.headers, "X-AIM-Filename", "file"))).name
+        dest_rel = unquote(header_value(self.headers, "X-AIM-Dest")).strip()
         if not dest_rel:
-            self._json(400, {"ok": False, "error": "X-IVM-Dest is required"})
+            self._json(400, {"ok": False, "error": "X-AIM-Dest is required"})
             return
         try:
-            from_agent = agent_name(unquote(self.headers.get("X-IVM-From-Agent", "unknown")))
+            from_agent = agent_name(unquote(header_value(self.headers, "X-AIM-From-Agent", "unknown")))
         except ValueError as exc:
             self._json(400, {"ok": False, "error": str(exc)})
             return
-        from_node = _node(unquote(self.headers.get("X-IVM-From-Node", "unknown")))
+        from_node = _node(unquote(header_value(self.headers, "X-AIM-From-Node", "unknown")))
         try:
             dest = resolve_inside(Path(self.app.cfg.github_root), dest_rel)
             _reject_home(dest, allow_blobs=False)
@@ -420,9 +432,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "application/octet-stream")
         self.send_header("Content-Length", str(size))
-        self.send_header("X-IVM-Filename", quote(filename))
-        self.send_header("X-IVM-Sha256", digest.hexdigest())
-        self.send_header("X-IVM-Kind", kind)
+        for prefix in ("X-AIM-", "X-IVM-"):
+            self.send_header(prefix + "Filename", quote(filename))
+            self.send_header(prefix + "Sha256", digest.hexdigest())
+            self.send_header(prefix + "Kind", kind)
         self.send_header("Connection", "close")
         self._responded = True
         self.close_connection = True
@@ -485,7 +498,7 @@ class Handler(BaseHTTPRequestHandler):
             self._json(403, {"ok": False, "error": "stop is only accepted from this machine"})
             return
         self._json(200, {"ok": True, "stopping": True})
-        threading.Thread(target=self.server.shutdown, name="ivm-shutdown", daemon=True).start()
+        threading.Thread(target=self.server.shutdown, name="aim-shutdown", daemon=True).start()
 
 
 def _node(value: object) -> str:

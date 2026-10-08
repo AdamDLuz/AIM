@@ -6,7 +6,7 @@ import unittest
 
 from tests.support import ROOT  # noqa: F401
 
-from intravo_messenger.peers import PeerError, resolve_peer
+from aim.peers import PeerError, resolve_peer
 
 
 def _peer(name: str, node_id: str, host: str, port: int = 4777) -> dict:

@@ -11,10 +11,10 @@ from pathlib import Path
 
 from tests.support import ROOT, LiveNode, wait_task  # noqa: F401
 
-from intravo_messenger.cli import main
-from intravo_messenger.client import Client, IvmError
-from intravo_messenger.peers import learn_peer, remember_address
-from intravo_messenger.store import Store
+from aim.cli import main
+from aim.client import Client, AimError, _header
+from aim.peers import learn_peer, remember_address
+from aim.store import Store
 
 
 class ApiTests(unittest.TestCase):
@@ -44,13 +44,13 @@ class ApiTests(unittest.TestCase):
                 "from_agent": "claude",
                 "to_agent": "grok",
                 "cwd": "Demo",
-                "shell": "echo ivm-ok",
+                "shell": "echo aim-ok",
                 "timeout_s": 30,
             }
         )
         task = wait_task(self.node.client, created["task"]["id"])
         self.assertEqual(task["exit_code"], 0)
-        self.assertIn("ivm-ok", task["output"])
+        self.assertIn("aim-ok", task["output"])
 
         writer = self.node.client.create_task(
             {
@@ -85,7 +85,7 @@ class ApiTests(unittest.TestCase):
         self.assertTrue(result["ok"])
         landed = self.node.github / "Demo" / "incoming" / "note.txt"
         self.assertEqual(landed.read_text(encoding="utf-8"), "hi")
-        with self.assertRaises(IvmError) as caught:
+        with self.assertRaises(AimError) as caught:
             self.node.client.send_file(local, "../outside.txt", "test-node", "claude")
         self.assertEqual(caught.exception.status, 400)
         self.assertFalse((self.node.github.parent / "outside.txt").exists())
@@ -108,10 +108,10 @@ class ApiTests(unittest.TestCase):
 
     def test_bad_token_and_bad_cwd(self) -> None:
         bad = Client("127.0.0.1", self.node.cfg.http_port, "x" * 40)
-        with self.assertRaises(IvmError) as caught:
+        with self.assertRaises(AimError) as caught:
             bad.identity()
         self.assertEqual(caught.exception.status, 401)
-        with self.assertRaises(IvmError) as cwd:
+        with self.assertRaises(AimError) as cwd:
             self.node.client.create_task(
                 {"cwd": "..", "shell": "echo hi", "timeout_s": 5, "from_agent": "claude"}
             )
@@ -176,6 +176,12 @@ class ApiTests(unittest.TestCase):
         self.assertIn("ok.txt", names)
         blob = b"".join(archive.read(name) for name in names)
         self.assertNotIn(b"do-not-pack", blob)
+
+
+class HeaderTests(unittest.TestCase):
+    def test_reads_earlier_file_header(self) -> None:
+        self.assertEqual(_header({"X-AIM-Filename": "a.txt"}, "X-AIM-Filename"), "a.txt")
+        self.assertEqual(_header({"X-IVM-Filename": "b.txt"}, "X-AIM-Filename"), "b.txt")
 
 
 if __name__ == "__main__":

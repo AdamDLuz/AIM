@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from intravo_messenger.store import Store, utc_now
+from aim.store import Store, utc_now
 
 ONLINE_SECONDS = 20
 
@@ -81,7 +81,7 @@ def resolve_peer(peers: list[dict], query: str) -> dict:
     if len(prefix) > 1:
         names = ", ".join(sorted(peer["name"] for peer in prefix))
         raise PeerError(f"peer {query!r} is ambiguous: {names}")
-    raise PeerError(f"no peer named {query!r}. Run: ivm peers")
+    raise PeerError(f"no peer named {query!r}. Run: aim peers")
 
 
 def learn_peer(store: Store, cfg, host: str, port: int, pinned: bool = False) -> dict:
@@ -90,7 +90,7 @@ def learn_peer(store: Store, cfg, host: str, port: int, pinned: bool = False) ->
     `cfg` is a Config. Imported loosely so this module stays usable in unit
     tests that only have the store.
     """
-    from intravo_messenger.client import Client
+    from aim.client import Client
 
     client = Client(host, int(port), cfg.secret, timeout=5)
     identity = client.identity()

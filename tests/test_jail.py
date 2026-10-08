@@ -9,7 +9,7 @@ from pathlib import Path
 
 from tests.support import ROOT  # noqa: F401  (puts src on sys.path)
 
-from intravo_messenger.jail import PathJailError, is_inside, resolve_inside
+from aim.jail import PathJailError, is_inside, resolve_inside
 
 
 class JailTests(unittest.TestCase):

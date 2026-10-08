@@ -8,10 +8,11 @@ import secrets
 import socket
 import sys
 import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from intravo_messenger import __version__
+from aim import __version__
 
 HTTP_PORT = 4777
 DISCOVERY_PORT = 4778
@@ -20,10 +21,21 @@ VERSION = __version__
 
 
 def home_dir() -> Path:
-    override = os.environ.get("IVM_HOME")
+    return resolve_home(Path.home(), os.environ)
+
+
+def resolve_home(user_home: Path, env: Mapping[str, str]) -> Path:
+    """Profile directory. An earlier install lives in .intravo-messenger until it is moved."""
+    override = env.get("AIM_HOME") or env.get("IVM_HOME")
     if override:
         return Path(override)
-    return Path.home() / ".intravo-messenger"
+    current = user_home / ".aim"
+    if current.exists():
+        return current
+    legacy = user_home / ".intravo-messenger"
+    if legacy.is_dir():
+        return legacy
+    return current
 
 
 def config_path() -> Path:
@@ -140,7 +152,7 @@ def load_config() -> Config:
     path = config_path()
     if not path.is_file():
         raise FileNotFoundError(
-            f"No config at {path}. Run: ivm install"
+            f"No config at {path}. Run: aim install"
         )
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
@@ -210,7 +222,7 @@ def create_config(
 
 
 def agent_name(explicit: str | None) -> str:
-    picked = (explicit or os.environ.get("IVM_AGENT") or "unknown").strip().lower()
+    picked = (explicit or os.environ.get("AIM_AGENT") or os.environ.get("IVM_AGENT") or "unknown").strip().lower()
     if not picked or len(picked) > 32 or any(not (ch.isalnum() or ch in "-_") for ch in picked):
         raise ValueError(f"invalid agent name: {explicit!r}")
     return picked

@@ -13,29 +13,36 @@ import socket
 import threading
 import time
 
-from intravo_messenger.config import Config, os_label
-from intravo_messenger.netutil import broadcast_targets, local_ipv4s
-from intravo_messenger.store import Store, utc_now
+from aim.config import Config, os_label
+from aim.netutil import broadcast_targets, local_ipv4s
+from aim.store import Store, utc_now
 
-log = logging.getLogger("ivm.discovery")
+log = logging.getLogger("aim.discovery")
 
-MAGIC = b"IVM1"
+MAGIC = b"AIM1"
+# Earlier installs advertised this prefix. Accept it so a mixed LAN still discovers.
+LEGACY_MAGIC = b"IVM1"
 BEACON_INTERVAL_S = 3.0
 PROBE_INTERVAL_S = 15.0
 
 
 def encode_beacon(payload: dict) -> bytes:
+    return _frame(MAGIC, payload)
+
+
+def _frame(magic: bytes, payload: dict) -> bytes:
     body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
     if len(body) > 1400:
         raise ValueError("beacon is larger than 1400 bytes")
-    return MAGIC + body
+    return magic + body
 
 
 def decode_beacon(data: bytes) -> dict | None:
-    if not data.startswith(MAGIC):
+    magic = next((item for item in (MAGIC, LEGACY_MAGIC) if data.startswith(item)), None)
+    if magic is None:
         return None
     try:
-        obj = json.loads(data[len(MAGIC) :].decode("utf-8"))
+        obj = json.loads(data[len(magic) :].decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError):
         return None
     if not isinstance(obj, dict) or obj.get("v") != 1:
@@ -69,7 +76,7 @@ class Discovery:
         if not self.cfg.discovery_enabled:
             log.info("discovery disabled")
             return
-        self._thread = threading.Thread(target=self._run, name="ivm-discovery", daemon=True)
+        self._thread = threading.Thread(target=self._run, name="aim-discovery", daemon=True)
         self._thread.start()
 
     def stop(self) -> None:
@@ -113,15 +120,17 @@ class Discovery:
 
     def _send(self, sock: socket.socket) -> None:
         try:
-            packet = encode_beacon(beacon_payload(self.cfg))
+            payload = beacon_payload(self.cfg)
+            packets = (_frame(MAGIC, payload), _frame(LEGACY_MAGIC, payload))
         except ValueError as exc:
             log.warning("%s", exc)
             return
-        for target in broadcast_targets(local_ipv4s()):
-            try:
-                sock.sendto(packet, (target, int(self.cfg.discovery_port)))
-            except OSError:
-                continue
+        for packet in packets:
+            for target in broadcast_targets(local_ipv4s()):
+                try:
+                    sock.sendto(packet, (target, int(self.cfg.discovery_port)))
+                except OSError:
+                    continue
 
     def _ingest(self, data: bytes, source_ip: str) -> None:
         payload = decode_beacon(data)
@@ -152,13 +161,13 @@ class Discovery:
         )
 
     def _probe_pinned(self) -> None:
-        from intravo_messenger.client import IvmError
-        from intravo_messenger.peers import PeerError, learn_peer
+        from aim.client import AimError
+        from aim.peers import PeerError, learn_peer
 
         for peer in self.store.list_peers():
             if not peer.get("pinned"):
                 continue
             try:
                 learn_peer(self.store, self.cfg, peer["host"], int(peer["port"]), pinned=True)
-            except (IvmError, OSError, PeerError):
+            except (AimError, OSError, PeerError):
                 continue

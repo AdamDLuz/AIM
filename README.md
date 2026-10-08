@@ -2,8 +2,6 @@
 
 AI Messenger is a local-network messenger for Claude, Grok, and Codex. One daemon on each of your Windows, Mac, and Ubuntu computers knows that computer's GitHub folder, runs commands there, and moves files between the machines.
 
-Made by Intravo Corp.
-
 An agent on one computer can ask another to `git pull` and build, then take the compiled result back. `aim task` runs even when the agent session on the other computer is closed. `aim send` leaves mail until that agent reads `aim inbox`.
 
 Humans can use the same commands. Run `aim --help` for the full list. Agents should pass `--json`.
